@@ -55,6 +55,10 @@ export class CalendarService {
         return await Calendar.find({ owner: userId })
     }
 
+    async getCalendarById(calendarId: string): Promise<ICalendar | null> {
+        return Calendar.findById(calendarId);
+    }
+
     async addAppointmentToCalendar(calendarId: string, appointment: Partial<IAppointment>): Promise<ICalendar | null> {
         // Verificar si existeix el calendari
         const calendar = await Calendar.findOne({ _id: calendarId });

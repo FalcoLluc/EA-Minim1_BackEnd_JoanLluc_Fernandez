@@ -2,8 +2,12 @@ import { Request, Response } from 'express';
 import { ICalendar } from './calendar.model';
 import { CalendarService } from './calendar.services';
 import {IAppointment} from '../appointment/appointment.model'
+import { createChange } from '../changes/change.controller';
+import { ChangeService } from '../changes/change.services';
+import mongoose from 'mongoose';
 
 const calendarService = new CalendarService();
+const changeService = new ChangeService();
 
 export async function createCalendar(req: Request, res: Response): Promise<Response> {
     try {
@@ -111,33 +115,66 @@ export async function getCalendarsOfUser(req:Request, res:Response): Promise<Res
     }
 }
 
+export async function getCalendarById(req: Request, res: Response): Promise<Response> {
+    try {
+        const { calendarId } = req.params;
+        const calendar = await calendarService.getCalendarById(calendarId);
+
+        if (!calendar) {
+            return res.status(404).json({ message: "Calendar not found" });
+        }
+
+        return res.status(200).json({
+            message: "Calendar obtained",
+            calendar: calendar
+        });
+    } catch (error) {
+        console.log("Server Error", error);
+        return res.status(500).json({ message: "Server Error" });
+    }
+}
+
 export async function addAppointmentToCalendar(req: Request, res: Response): Promise<Response> {
     try {
-        console.log("Adding an appointment to the calendar of a user");
+        console.log("Adding an appointment to the calendar");
         const { calendarId } = req.params;
         const appointment: Partial<IAppointment> = req.body;
-
-        // Llamar al servicio
-        const answer = await calendarService.addAppointmentToCalendar(calendarId, appointment);
-
-        // Manejar la respuesta del servicio
-        if (answer === null) {
-            console.log("Calendar not found");
-            return res.status(404).json({
-                message: "Calendar not found"
-            });
-        } else {
-            console.log("Appointment added to calendar");
-            return res.status(201).json({
-                message: "Appointment added to calendar",
-                calendar: answer
-            });
+        
+        // Get calendar before modification
+        const calendarBefore = await calendarService.getCalendarById(calendarId);
+        if (!calendarBefore) {
+            return res.status(404).json({ message: "Calendar not found" });
         }
-    } catch (error) {
-        console.log("Server Error");
-        return res.status(500).json({
-            message: "Server Error"
+
+        // Get user ID from calendar owner
+        const userId = calendarBefore.owner.toString();
+
+        const updatedCalendar = await calendarService.addAppointmentToCalendar(calendarId, appointment);
+        if (!updatedCalendar) {
+            return res.status(404).json({ message: "Failed to add appointment" });
+        }
+
+        const calendarAfter = await calendarService.getCalendarById(calendarId);
+        if (!calendarAfter) {
+            return res.status(404).json({ message: "Calendar not found" });
+        }
+
+        await changeService.createChange({
+            date: new Date(), // Explicitly set current date
+            user: calendarBefore.owner, // Direct ObjectId reference
+            calendar: calendarBefore._id, // Direct ObjectId reference
+            previousState: calendarBefore, 
+            newState: calendarAfter, 
+            isDeleted: false // Explicit default
+        }); 
+
+        return res.status(201).json({
+            message: "Appointment added to calendar",
+            calendar: updatedCalendar
         });
+    } catch (error) {
+        console.log("Server Error", error);
+        return res.status(500).json({ message: "Server Error" });
     }
 }
 
@@ -196,15 +233,49 @@ export async function restoreCalendarsUser(req: Request, res: Response) {
     }
 }
 
-export async function editCalendar(req: Request, res: Response) {
+export async function editCalendar(req: Request, res: Response): Promise<Response> {
     try {
+        console.log("Editing calendar");
         const { calendarId } = req.params;
         const changes = req.body;
 
-        const result = await calendarService.editCalendar(calendarId, changes);
-        if (result == null) return res.status(404).json({ error: "Could not find calendar"});
-        return res.json(result);
+        // 1. Get current state before modification
+        const calendarBefore = await calendarService.getCalendarById(calendarId);
+        if (!calendarBefore) {
+            return res.status(404).json({ error: "Calendar not found" });
+        }
+
+        // 2. Perform the update
+        const updatedCalendar = await calendarService.editCalendar(calendarId, changes);
+        if (!updatedCalendar) {
+            return res.status(404).json({ error: "Failed to update calendar" });
+        }
+
+        const calendarAfter = await calendarService.getCalendarById(calendarId);
+        if (!calendarAfter) {
+            return res.status(404).json({ message: "Calendar not found" });
+        }
+
+        // 3. Create change record (matches your model exactly)
+        await changeService.createChange({
+            date: new Date(),
+            user: calendarBefore.owner,
+            calendar: calendarBefore._id,
+            previousState: calendarAfter, 
+            newState: updatedCalendar,
+            isDeleted: false // Explicit default
+        });
+
+        // 4. Return success response
+        return res.status(200).json({
+            message: "Calendar updated successfully",
+            calendar: updatedCalendar
+        });
+
     } catch (error) {
-        return res.status(500).json({ error: "Failed to edit calendar" });
+        console.error("Error editing calendar:", error);
+        return res.status(500).json({ 
+            error: "Failed to edit calendar"
+        });
     }
 }

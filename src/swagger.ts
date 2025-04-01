@@ -121,6 +121,17 @@ const options = {
                         },
                     },
                 },
+                Change: {
+                type: 'object',
+                properties: {
+                    date: { type: 'string', format: 'date-time' },
+                    user: { type: 'string', description: 'User ID who made the change' },
+                    calendar: { type: 'string', description: 'Calendar ID that was modified' },
+                    previousState: { $ref: '#/components/schemas/Calendar' },
+                    newState: { $ref: '#/components/schemas/Calendar' },
+                    isDeleted: { type: 'boolean' }
+                }
+                }
             },
         },
     },

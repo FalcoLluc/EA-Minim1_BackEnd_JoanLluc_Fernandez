@@ -9,6 +9,7 @@ import {
     restoreCalendarsUser,
     getAllAppointments,
     getAppointmentsBetweenDates,
+    getCalendarById,
     editCalendar
 } from './calendar.controller';
 
@@ -157,6 +158,29 @@ router.get('/:calendarId/appointments/:date', getAppointmentsForADay);
  *         description: Error del servidor
  */
 router.get('/:userId', getCalendarsOfUser);
+
+/**
+ * @swagger
+ * /calendars/{calendarId}:
+ *   get:
+ *     summary: Obtiene un calendario por su ID
+ *     tags: [Calendars]
+ *     parameters:
+ *       - in: path
+ *         name: calendarId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del calendario
+ *     responses:
+ *       200:
+ *         description: Calendario obtenido exitosamente
+ *       404:
+ *         description: Calendario no encontrado
+ *       500:
+ *         description: Error del servidor
+ */
+router.get('/:calendarId', getCalendarById);
 
 /**
  * @swagger
